@@ -25,10 +25,7 @@ function getLocaleFromBrowser(): Locale {
 		'pt-br': ptBR,
 	};
 
-	// Match full locale code first, then primary language
-	return (
-		localeMap[lang] || localeMap[lang.split('-')[0]] || enUS // default fallback
-	);
+	return localeMap[lang] || localeMap[lang.split('-')[0]] || enUS;
 }
 
 export interface FormDatePickerProps<R = Record<string, unknown>>
@@ -56,48 +53,36 @@ export function FormDatePicker<R = Record<string, unknown>>({
 	);
 	const inputRef = useRef<HTMLInputElement | null>(null);
 
-	// Use a ref to hold the latest inputValue for use in callbacks without adding a dependency.
 	const inputValueRef = useRef(inputValue);
 	inputValueRef.current = inputValue;
 
 	const validateField = useCallback(
 		(_fieldId: string, _trimmedValues: Record<string, unknown>) => {
-			// placeholder: if you have a form-level validator, call it here.
-			// For now, just clear previous errors when value changes.
-			void _fieldId; // mark used to satisfy linter
+			void _fieldId;
 			void _trimmedValues;
 			helpers.setError(undefined);
 		},
 		[helpers]
 	);
 
-	// Sync input display with Formik field value when field.value changes.
-	// This handles cases where field.value is updated by the calendar picker or externally.
 	useEffect(() => {
 		const formattedFieldValue = field.value
 			? format(new Date(field.value), 'P', { locale: detectedLocale })
 			: '';
 
-		// Only update inputValue if field.value has changed and
-		// inputValue does not already match the formatted field.value.
-		// This prevents overwriting user's partial input while typing,
-		// but ensures consistency if field.value is set by other means.
-		// We also check if the input is currently focused to avoid changing text while the user is typing.
 		if (
 			formattedFieldValue !== inputValueRef.current &&
 			document.activeElement !== inputRef.current
 		) {
 			setInputValue(formattedFieldValue);
 		}
-	}, [field.value, detectedLocale]); // inputValueRef is stable and not needed as a dependency
+	}, [field.value, detectedLocale]);
 
 	const handleChange = useCallback(
 		(date: Date | null) => {
 			const dateValue = date ? date.toISOString() : null;
 			helpers.setValue(dateValue, false);
 			validateField(fieldName, { [fieldName]: dateValue });
-			// forward original onChange if provided
-			// MUI DatePicker onChange signature: (value: T | null) => void
 			(originalOnChange as unknown as (d: Date | null) => void)?.(date);
 		},
 		[helpers, fieldName, validateField, originalOnChange]
@@ -111,7 +96,6 @@ export function FormDatePicker<R = Record<string, unknown>>({
 		setInputValue(event.target.value);
 	}, []);
 
-	// allow Enter to commit the typed shortcut (e.g. "d") without needing to blur
 	const handleInputKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
 		if (event.key === 'Enter') {
 			event.currentTarget.blur();
@@ -132,7 +116,6 @@ export function FormDatePicker<R = Record<string, unknown>>({
 
 		let parsedDate: Date | null = null;
 
-		// --- Relative shortcuts (d, m, y) ---
 		if (/^d\d*$|^m\d*$|^y\d*$|^d$/i.test(trimmed)) {
 			const token = trimmed.toLowerCase();
 			if (token === 'd') parsedDate = dayjs().toDate();
@@ -149,21 +132,17 @@ export function FormDatePicker<R = Record<string, unknown>>({
 					.add(parseInt(token.slice(1), 10), 'year')
 					.toDate();
 		} else {
-			// --- Locale-based parsing ---
 			const parsed = parse(trimmed, 'P', new Date(), { locale: detectedLocale });
 			if (!isNaN(parsed.getTime())) parsedDate = parsed;
 		}
 
 		if (parsedDate && !isNaN(parsedDate.getTime())) {
 			const isoDate = parsedDate.toISOString();
-			// Explicitly format and set inputValue here, as this is the "on blur" formatting.
-			// The useEffect will then see that inputValue already matches and won't re-set.
 			const formatted = format(parsedDate, 'P', { locale: detectedLocale });
 			helpers.setValue(isoDate, false);
 			setInputValue(formatted);
 			validateField(fieldName, { [fieldName]: isoDate });
 		} else {
-			// If invalid, clear the field and Formik value
 			helpers.setValue(null, false);
 			setInputValue('');
 			validateField(fieldName, { [fieldName]: null });
@@ -177,14 +156,13 @@ export function FormDatePicker<R = Record<string, unknown>>({
 		return new Date(field.value);
 	}, [field.value]);
 
+	// THE FIX: Add all necessary dependencies to useCallback
 	const renderTextField = useCallback(
 		(params: TextFieldProps) => {
 			const finalProps: TextFieldProps = {
-				// start with params provided by MUI
 				...params,
-				// allow user overrides from textFieldProps
 				...(textFieldProps as Partial<TextFieldProps>),
-				// ensure our inputProps and handlers override any incoming ones
+				inputRef: inputRef,
 				value: inputValue,
 				error: errorState,
 				helperText: errorState ? meta.error : helperText,
@@ -195,15 +173,12 @@ export function FormDatePicker<R = Record<string, unknown>>({
 
 			return <TextField {...finalProps} />;
 		},
-		// Dependencies for useCallback:
-		// These ensure the function is only recreated if one of these values changes.
-		// All event handlers (handleInputChange, handleInputBlur, handleInputKeyDown)
-		// and refs (inputRef) are stable or memoized, so they don't cause unnecessary re-renders.
-		// By removing all volatile dependencies, this function becomes stable during typing,
-		// which prevents the TextField from being re-created and losing focus.
-		// It will still render the correct values because it has access to the latest state via closure.
 		[
-			textFieldProps, // Keep textFieldProps for custom overrides
+			textFieldProps,
+			inputValue, // Added: current input value
+			errorState, // Added: error state
+			meta.error, // Added: meta error message
+			helperText, // Added: helper text
 			handleInputChange,
 			handleInputBlur,
 			handleInputKeyDown,
