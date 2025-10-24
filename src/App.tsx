@@ -8,7 +8,7 @@ interface FormValues {
 }
 
 const initialValues: FormValues = {
-	startDate: null,
+	startDate: "1/1/2022",
 };
 
 export default function App() {
