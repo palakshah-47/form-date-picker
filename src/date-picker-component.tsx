@@ -1,7 +1,7 @@
-import { TextField, TextFieldProps, InputAdornment, IconButton } from '@mui/material';
-import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
+import { TextField, TextFieldProps, InputAdornment, IconButton, Popover } from '@mui/material';
+import { DateCalendar, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useField } from 'formik';
 import React from 'react';
 import { Locale, format, parse, addMonths, addYears } from 'date-fns';
@@ -31,27 +31,23 @@ function getLocaleFromBrowser(): Locale {
 }
 
 export interface FormDatePickerProps<R = Record<string, unknown>>
-	extends Omit<React.ComponentProps<typeof DatePicker>, 'value'> {
+	extends Omit<TextFieldProps, 'value' | 'onChange'> {
 	fieldName: keyof R & string;
 	helperText?: string;
 	locale?: Locale;
-	textFieldProps?: Partial<TextFieldProps>;
 }
 
 export function FormDatePicker<R = Record<string, unknown>>({
 	fieldName,
 	helperText,
 	locale,
-	onChange: originalOnChange,
-	textFieldProps,
-	...props
+	...textFieldProps
 }: FormDatePickerProps<R>) {
 	const detectedLocale = locale || getLocaleFromBrowser();
 
 	const [field, meta, helpers] = useField<string | null>(fieldName as string);
-	const [error, setError] = useState<boolean | undefined>(undefined);
 	const [inputValue, setInputValue] = useState<string>('');
-	const [open, setOpen] = useState(false);
+	const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 	const inputRef = useRef<HTMLInputElement | null>(null);
 
 	const validateField = useCallback(
@@ -73,26 +69,18 @@ export function FormDatePicker<R = Record<string, unknown>>({
 		}
 	}, [field.value, detectedLocale]);
 
-	const handleDateChange = useCallback(
+	const handleCalendarChange = useCallback(
 		(date: Date | null) => {
-			const dateValue = date ? date.toISOString() : null;
-			helpers.setValue(dateValue, true);
-			validateField(fieldName, { [fieldName]: dateValue });
-			(originalOnChange as unknown as (d: Date | null) => void)?.(date);
-
-			// Update input display
 			if (date) {
+				const dateValue = date.toISOString();
+				helpers.setValue(dateValue, true);
+				validateField(fieldName, { [fieldName]: dateValue });
 				setInputValue(format(date, 'P', { locale: detectedLocale }));
-			} else {
-				setInputValue('');
 			}
+			setAnchorEl(null); // Close popover
 		},
-		[helpers, fieldName, validateField, originalOnChange, detectedLocale]
+		[helpers, fieldName, validateField, detectedLocale]
 	);
-
-	const handleError = useCallback((newError: unknown) => {
-		setError(newError !== null);
-	}, []);
 
 	const clearDate = useCallback(() => {
 		helpers.setValue(null, true);
@@ -101,6 +89,14 @@ export function FormDatePicker<R = Record<string, unknown>>({
 			inputRef.current.focus();
 		}
 	}, [helpers]);
+
+	const openCalendar = useCallback((event: React.MouseEvent<HTMLElement>) => {
+		setAnchorEl(event.currentTarget);
+	}, []);
+
+	const closeCalendar = useCallback(() => {
+		setAnchorEl(null);
+	}, []);
 
 	// Parse shortcut strings like "d", "d1", "m2", "y3"
 	const parseShortcut = useCallback((input: string): Date | null => {
@@ -134,10 +130,13 @@ export function FormDatePicker<R = Record<string, unknown>>({
 		(event: React.KeyboardEvent<HTMLInputElement>) => {
 			const input = event.currentTarget;
 			const currentValue = field.value;
+			const currentInputValue = input.value.trim();
 
 			// Ctrl+Left/Right: Change month
 			if (event.ctrlKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
 				event.preventDefault();
+
+				// If there's a value in Formik, use it
 				if (currentValue) {
 					const currentDate = new Date(currentValue);
 					const newDate =
@@ -149,12 +148,32 @@ export function FormDatePicker<R = Record<string, unknown>>({
 					helpers.setValue(isoDate, true);
 					validateField(fieldName, { [fieldName]: isoDate });
 					setInputValue(format(newDate, 'P', { locale: detectedLocale }));
+				} else if (currentInputValue) {
+					// Try to parse what the user typed first
+					const shortcutDate = parseShortcut(currentInputValue);
+					const parsedDate =
+						shortcutDate ||
+						parse(currentInputValue, 'P', new Date(), { locale: detectedLocale });
+
+					if (!isNaN(parsedDate.getTime())) {
+						const newDate =
+							event.key === 'ArrowLeft'
+								? addMonths(parsedDate, -1)
+								: addMonths(parsedDate, 1);
+
+						const isoDate = newDate.toISOString();
+						helpers.setValue(isoDate, true);
+						validateField(fieldName, { [fieldName]: isoDate });
+						setInputValue(format(newDate, 'P', { locale: detectedLocale }));
+					}
 				}
 			}
 
 			// Ctrl+Up/Down: Change year
 			if (event.ctrlKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
 				event.preventDefault();
+
+				// If there's a value in Formik, use it
 				if (currentValue) {
 					const currentDate = new Date(currentValue);
 					const newDate =
@@ -166,6 +185,24 @@ export function FormDatePicker<R = Record<string, unknown>>({
 					helpers.setValue(isoDate, true);
 					validateField(fieldName, { [fieldName]: isoDate });
 					setInputValue(format(newDate, 'P', { locale: detectedLocale }));
+				} else if (currentInputValue) {
+					// Try to parse what the user typed first
+					const shortcutDate = parseShortcut(currentInputValue);
+					const parsedDate =
+						shortcutDate ||
+						parse(currentInputValue, 'P', new Date(), { locale: detectedLocale });
+
+					if (!isNaN(parsedDate.getTime())) {
+						const newDate =
+							event.key === 'ArrowUp'
+								? addYears(parsedDate, 1)
+								: addYears(parsedDate, -1);
+
+						const isoDate = newDate.toISOString();
+						helpers.setValue(isoDate, true);
+						validateField(fieldName, { [fieldName]: isoDate });
+						setInputValue(format(newDate, 'P', { locale: detectedLocale }));
+					}
 				}
 			}
 
@@ -257,78 +294,65 @@ export function FormDatePicker<R = Record<string, unknown>>({
 		[helpers, validateField, fieldName, parseShortcut, detectedLocale]
 	);
 
-	const errorState = error ?? (meta.touched && Boolean(meta.error));
-
-	const datePickerValue = useMemo(() => {
-		if (!field.value) return null;
-		return new Date(field.value);
-	}, [field.value]);
+	const errorState = meta.touched && Boolean(meta.error);
+	const calendarValue = field.value ? new Date(field.value) : null;
 
 	return (
-		<LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={detectedLocale}>
-			<DatePicker
-				enableAccessibleFieldDOMStructure={false}
-				open={open}
-				onOpen={() => setOpen(true)}
-				onClose={() => setOpen(false)}
-				value={datePickerValue}
-				onChange={handleDateChange}
-				onError={handleError}
-				slots={{
-					textField: (params) => {
-						// Remove internal MUI props that shouldn't be passed to DOM
-						const {
-							inputRef: paramsInputRef,
-							inputProps,
-							InputProps,
-							ownerState,
-							sectionListRef,
-							areAllSectionsEmpty,
-
-							...cleanParams
-						} = params;
-
-						return (
-							<TextField
-								{...cleanParams}
-								{...textFieldProps}
-								inputRef={inputRef}
-								value={inputValue}
-								onChange={handleInputChange}
-								onKeyDown={handleKeyDown}
-								onBlur={handleBlur}
-								error={errorState}
-								helperText={errorState ? meta.error : helperText}
-								placeholder=""
-								InputProps={{
-									endAdornment: (
-										<InputAdornment position="end">
-											{inputValue && (
-												<IconButton
-													size="small"
-													onClick={clearDate}
-													edge="end"
-													sx={{ mr: 0.5 }}
-												>
-													<ClearIcon fontSize="small" />
-												</IconButton>
-											)}
-											<IconButton
-												size="small"
-												onClick={() => setOpen(!open)}
-												edge="end"
-											>
-												<CalendarTodayIcon fontSize="small" />
-											</IconButton>
-										</InputAdornment>
-									),
-								}}
-							/>
-						);
-					},
+		<>
+			<TextField
+				{...textFieldProps}
+				inputRef={inputRef}
+				value={inputValue}
+				onChange={handleInputChange}
+				onKeyDown={handleKeyDown}
+				onBlur={handleBlur}
+				error={errorState}
+				helperText={errorState ? meta.error : helperText}
+				placeholder=""
+				InputProps={{
+					endAdornment: (
+						<InputAdornment position="end">
+							{inputValue && (
+								<IconButton
+									size="small"
+									onClick={clearDate}
+									edge="end"
+									sx={{ mr: 0.5 }}
+									tabIndex={-1}
+								>
+									<ClearIcon fontSize="small" />
+								</IconButton>
+							)}
+							<IconButton
+								size="small"
+								onClick={openCalendar}
+								edge="end"
+								tabIndex={-1}
+							>
+								<CalendarTodayIcon fontSize="small" />
+							</IconButton>
+						</InputAdornment>
+					),
 				}}
-				{...props}
 			/>
-		</LocalizationProvider>
+
+			<Popover
+				open={Boolean(anchorEl)}
+				anchorEl={anchorEl}
+				onClose={closeCalendar}
+				anchorOrigin={{
+					vertical: 'bottom',
+					horizontal: 'left',
+				}}
+				transformOrigin={{
+					vertical: 'top',
+					horizontal: 'left',
+				}}
+			>
+				<LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={detectedLocale}>
+					<DateCalendar value={calendarValue} onChange={handleCalendarChange} />
+				</LocalizationProvider>
+			</Popover>
+		</>
 	);
 }
