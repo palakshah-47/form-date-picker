@@ -100,10 +100,10 @@ export function FormDatePicker<R = Record<string, unknown>>({
 
 	// Parse shortcut strings like "d", "d1", "m2", "y3"
 	const parseShortcut = useCallback((input: string): Date | null => {
-		const trimmed = input.trim().toLowerCase();
+		const trimmed = input?.trim().toLowerCase();
 
 		// Match patterns: d, d1, m2, y3, etc.
-		const match = trimmed.match(/^([dmy])(\d*)$/);
+		const match = trimmed?.match(/^([dmy])(\d*)$/);
 		if (!match) return null;
 
 		const [, type, numStr] = match;
@@ -130,11 +130,19 @@ export function FormDatePicker<R = Record<string, unknown>>({
 		(event: React.KeyboardEvent<HTMLInputElement>) => {
 			const input = event.currentTarget;
 			const currentValue = field.value;
-			const currentInputValue = input.value.trim();
+			const currentInputValue = input.value?.trim();
 
 			// Ctrl+Left/Right: Change month
 			if (event.ctrlKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
 				event.preventDefault();
+				event.stopPropagation();
+
+				console.log(
+					'Ctrl+Arrow left or right detected, field.value:',
+					field.value,
+					'inputValue:',
+					currentInputValue
+				);
 
 				// If there's a value in Formik, use it
 				if (currentValue) {
@@ -172,6 +180,14 @@ export function FormDatePicker<R = Record<string, unknown>>({
 			// Ctrl+Up/Down: Change year
 			if (event.ctrlKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
 				event.preventDefault();
+				event.stopPropagation();
+
+				console.log(
+					'Ctrl+Arrow up or down detected, field.value:',
+					field.value,
+					'inputValue:',
+					currentInputValue
+				);
 
 				// If there's a value in Formik, use it
 				if (currentValue) {
@@ -208,7 +224,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 
 			// Tab: Process shortcuts
 			if (event.key === 'Tab') {
-				const inputValue = input.value.trim();
+				const inputValue = input.value?.trim();
 
 				// Try shortcut parsing
 				const shortcutDate = parseShortcut(inputValue);
