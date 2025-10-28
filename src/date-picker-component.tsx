@@ -212,7 +212,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 			}
 
 			// Enter: Process shortcuts
-			if (event.key === 'Enter') {
+		if (event.key === 'Enter') {
 				const inputValue = input.value.trim();
 				const shortcutDate = parseShortcut(inputValue);
 				if (shortcutDate) {
@@ -240,7 +240,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 
 			if (!value) {
 				helpers.setValue(null, true);
-				setInputValue('');
+		setInputValue('');
 				return;
 			}
 
@@ -251,8 +251,8 @@ export function FormDatePicker<R = Record<string, unknown>>({
 				helpers.setValue(isoDate, true);
 				validateField(fieldName, { [fieldName]: isoDate });
 				setInputValue(format(shortcutDate, 'P', { locale: detectedLocale }));
-				return;
-			}
+			return;
+		}
 
 			// Try parsing with the full locale format first
 			let parsed = parse(value, 'P', new Date(), { locale: detectedLocale });
@@ -282,14 +282,14 @@ export function FormDatePicker<R = Record<string, unknown>>({
 			if (!isNaN(parsed.getTime())) {
 				const isoDate = parsed.toISOString();
 				helpers.setValue(isoDate, true);
-				validateField(fieldName, { [fieldName]: isoDate });
+			validateField(fieldName, { [fieldName]: isoDate });
 				setInputValue(format(parsed, 'P', { locale: detectedLocale }));
-			} else {
+		} else {
 				// Invalid date, clear it
 				helpers.setValue(null, true);
-				setInputValue('');
-				validateField(fieldName, { [fieldName]: null });
-			}
+			setInputValue('');
+			validateField(fieldName, { [fieldName]: null });
+		}
 		},
 		[helpers, validateField, fieldName, parseShortcut, detectedLocale]
 	);
@@ -301,16 +301,24 @@ export function FormDatePicker<R = Record<string, unknown>>({
 		return new Date(field.value);
 	}, [field.value]);
 
-	const tooltipTitle = (
-		<div style={{ whiteSpace: 'pre-line', fontSize: '12px', lineHeight: '1.6' }}>
-			{'d - Current date\n' +
-			'd1 - One day more\n' +
-			'm1 - One month more\n' +
-			'y1 - One year more\n' +
-			'Ctrl+Left/Right - Previous/Next month\n' +
-			'Ctrl+Up/Down - Next/Previous year'}
-		</div>
-	);
+	const tooltipTitle = useMemo(() => {
+		const today = new Date();
+		const todayFormatted = format(today, 'P', { locale: detectedLocale });
+		const oneDayMore = format(dayjs().add(1, 'day').toDate(), 'P', { locale: detectedLocale });
+		const oneMonthMore = format(addMonths(today, 1), 'P', { locale: detectedLocale });
+		const oneYearMore = format(addYears(today, 1), 'P', { locale: detectedLocale });
+
+		return (
+			<div style={{ whiteSpace: 'pre-line', fontSize: '12px', lineHeight: '1.6' }}>
+				{`d - Current date (${todayFormatted})\n` +
+				`d1 - One day more (${oneDayMore})\n` +
+				`m1 - One month more (${oneMonthMore})\n` +
+				`y1 - One year more (${oneYearMore})\n` +
+				`Ctrl+Left/Right - Previous/Next month\n` +
+				`Ctrl+Up/Down - Next/Previous year`}
+			</div>
+		);
+	}, [detectedLocale]);
 
 	return (
 		<LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={detectedLocale}>
@@ -319,6 +327,18 @@ export function FormDatePicker<R = Record<string, unknown>>({
 				open={isFocused}
 				placement="top"
 				arrow
+				slotProps={{
+					popper: {
+						modifiers: [
+							{
+								name: 'offset',
+								options: {
+									offset: [0, -8],
+								},
+							},
+						],
+					},
+				}}
 			>
 				<TextField
 					{...textFieldProps}
@@ -333,7 +353,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 					helperText={errorState ? meta.error : helperText}
 					placeholder=""
 					sx={{ width: '200px', ...textFieldProps?.sx }}
-					slotProps={{
+				slotProps={{
 					input: {
 						sx: { width: '200px', ...textFieldProps?.sx },
 						endAdornment: (
