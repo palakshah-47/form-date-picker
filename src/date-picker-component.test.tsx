@@ -87,7 +87,7 @@ describe('FormDatePicker', () => {
 			});
 		});
 
-		it('should clear invalid date on blur', async () => {
+		it('should show error for invalid date', async () => {
 			const user = userEvent.setup();
 			render(<FormDatePickerWrapper />);
 			const input = screen.getByLabelText('Test Date') as HTMLInputElement;
@@ -96,7 +96,20 @@ describe('FormDatePicker', () => {
 			await user.tab();
 
 			await waitFor(() => {
-				expect(input.value).toBe('');
+				expect(screen.getByText('Invalid date format')).toBeInTheDocument();
+			});
+		});
+
+		it('should show error for invalid date values like month 13', async () => {
+			const user = userEvent.setup();
+			render(<FormDatePickerWrapper />);
+			const input = screen.getByLabelText('Test Date') as HTMLInputElement;
+
+			await user.type(input, '13/45/2025');
+			await user.tab();
+
+			await waitFor(() => {
+				expect(screen.getByText('Invalid date format')).toBeInTheDocument();
 			});
 		});
 	});
@@ -115,32 +128,38 @@ describe('FormDatePicker', () => {
 			});
 		});
 
-		it('should close calendar after date selection', async () => {
-			const user = userEvent.setup();
-			render(<FormDatePickerWrapper />);
+	it('should close calendar after date selection', async () => {
+		const user = userEvent.setup();
+		render(<FormDatePickerWrapper />);
 
-			// Open calendar
-			const buttons = screen.getAllByRole('button');
-			const calendarButton = buttons[buttons.length - 1];
-			await user.click(calendarButton);
+		// Open calendar
+		const buttons = screen.getAllByRole('button');
+		const calendarButton = buttons[buttons.length - 1];
+		await user.click(calendarButton);
 
-			await waitFor(() => {
-				expect(screen.getByRole('dialog')).toBeInTheDocument();
-			});
-
-			// Select a date (click on any date button)
-			const dateButtons = screen.getAllByRole('gridcell');
-			const selectableDate = dateButtons.find(
-				(btn) => !btn.classList.contains('Mui-disabled')
-			);
-			if (selectableDate) {
-				await user.click(selectableDate);
-
-				await waitFor(() => {
-					expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-				});
-			}
+		await waitFor(() => {
+			expect(screen.getByRole('dialog')).toBeInTheDocument();
 		});
+
+		// Select a date - find a button within a gridcell that's not disabled
+		const dateButtons = screen.getAllByRole('gridcell');
+		let selectedDate = false;
+
+		for (const cell of dateButtons) {
+			const button = cell.querySelector('button');
+			if (button && !button.disabled && !button.classList.contains('Mui-disabled')) {
+				fireEvent.click(button);
+				selectedDate = true;
+				break;
+			}
+		}
+
+		if (selectedDate) {
+			await waitFor(() => {
+				expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+			});
+		}
+	});
 	});
 
 	describe('Clear Button', () => {

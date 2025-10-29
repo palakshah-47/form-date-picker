@@ -66,15 +66,6 @@ export function FormDatePicker<R = Record<string, unknown>>({
 
 	const open = Boolean(anchorEl);
 
-	const validateField = useCallback(
-		(_fieldId: string, _trimmedValues: Record<string, unknown>) => {
-			void _fieldId;
-			void _trimmedValues;
-			helpers.setError(undefined);
-		},
-		[helpers]
-	);
-
 	// Sync input value with field value when field changes externally
 	React.useEffect(() => {
 		if (field.value) {
@@ -90,7 +81,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 		(date: Date | null) => {
 			const dateValue = date ? date.toISOString() : null;
 			helpers.setValue(dateValue, true);
-			validateField(fieldName, { [fieldName]: dateValue });
+			helpers.setError(undefined);
 
 			// Update input display
 			if (date) {
@@ -107,12 +98,13 @@ export function FormDatePicker<R = Record<string, unknown>>({
 				}
 			}, 0);
 		},
-		[helpers, fieldName, validateField, detectedLocale]
+		[helpers, detectedLocale]
 	);
 
 	// Clear date
 	const clearDate = useCallback(() => {
 		helpers.setValue(null, true);
+		helpers.setError(undefined);
 		setInputValue('');
 		if (inputRef.current) {
 			inputRef.current.focus();
@@ -141,10 +133,46 @@ export function FormDatePicker<R = Record<string, unknown>>({
 		return null;
 	}, []);
 
+	// Validate date input
+	const validateDateInput = useCallback((value: string): boolean => {
+		if (!value.trim()) {
+			helpers.setError(undefined);
+			return true;
+		}
+
+		// Check if it's a shortcut
+		const trimmed = value.trim().toLowerCase();
+		if (/^([dmy])(\d*)$/.test(trimmed)) {
+			helpers.setError(undefined);
+			return true;
+		}
+
+		// Check if it's a partial date format that will be auto-completed
+		if (/^\d{1,2}\/\d{1,2}(\/\d{0,4})?$/.test(value)) {
+			helpers.setError(undefined);
+			return true;
+		}
+
+		// Try parsing with the full locale format
+		const parsed = parse(value, 'P', new Date(), { locale: detectedLocale });
+		if (!isNaN(parsed.getTime())) {
+			helpers.setError(undefined);
+			return true;
+		}
+
+		// If we get here, it's invalid
+		helpers.setError('Invalid date format');
+		return false;
+	}, [detectedLocale, helpers]);
+
 	// Handle input change
 	const handleInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-		setInputValue(event.target.value);
-	}, []);
+		const newValue = event.target.value;
+		setInputValue(newValue);
+		
+		// Validate as user types (only set error, don't prevent typing)
+		validateDateInput(newValue);
+	}, [validateDateInput]);
 
 	// Handle keyboard shortcuts
 	const handleKeyDown = useCallback(
@@ -164,7 +192,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 
 					const isoDate = newDate.toISOString();
 					helpers.setValue(isoDate, true);
-					validateField(fieldName, { [fieldName]: isoDate });
+					helpers.setError(undefined);
 					setInputValue(format(newDate, 'P', { locale: detectedLocale }));
 				}
 				return;
@@ -182,7 +210,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 
 					const isoDate = newDate.toISOString();
 					helpers.setValue(isoDate, true);
-					validateField(fieldName, { [fieldName]: isoDate });
+					helpers.setError(undefined);
 					setInputValue(format(newDate, 'P', { locale: detectedLocale }));
 				}
 				return;
@@ -196,7 +224,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 					event.preventDefault();
 					const isoDate = shortcutDate.toISOString();
 					helpers.setValue(isoDate, true);
-					validateField(fieldName, { [fieldName]: isoDate });
+					helpers.setError(undefined);
 					setInputValue(format(shortcutDate, 'P', { locale: detectedLocale }));
 					
 					// Move to next field
@@ -212,19 +240,19 @@ export function FormDatePicker<R = Record<string, unknown>>({
 			}
 
 			// Enter: Process shortcuts
-		if (event.key === 'Enter') {
+			if (event.key === 'Enter') {
 				const inputValue = input.value.trim();
 				const shortcutDate = parseShortcut(inputValue);
 				if (shortcutDate) {
 					event.preventDefault();
 					const isoDate = shortcutDate.toISOString();
 					helpers.setValue(isoDate, true);
-					validateField(fieldName, { [fieldName]: isoDate });
+					helpers.setError(undefined);
 					setInputValue(format(shortcutDate, 'P', { locale: detectedLocale }));
 				}
 			}
 		},
-		[field.value, helpers, fieldName, validateField, parseShortcut, detectedLocale]
+		[field.value, helpers, parseShortcut, detectedLocale]
 	);
 
 	// Handle focus
@@ -240,7 +268,8 @@ export function FormDatePicker<R = Record<string, unknown>>({
 
 			if (!value) {
 				helpers.setValue(null, true);
-		setInputValue('');
+				helpers.setError(undefined);
+				setInputValue('');
 				return;
 			}
 
@@ -249,10 +278,10 @@ export function FormDatePicker<R = Record<string, unknown>>({
 			if (shortcutDate) {
 				const isoDate = shortcutDate.toISOString();
 				helpers.setValue(isoDate, true);
-				validateField(fieldName, { [fieldName]: isoDate });
+				helpers.setError(undefined);
 				setInputValue(format(shortcutDate, 'P', { locale: detectedLocale }));
-			return;
-		}
+				return;
+			}
 
 			// Try parsing with the full locale format first
 			let parsed = parse(value, 'P', new Date(), { locale: detectedLocale });
@@ -282,19 +311,22 @@ export function FormDatePicker<R = Record<string, unknown>>({
 			if (!isNaN(parsed.getTime())) {
 				const isoDate = parsed.toISOString();
 				helpers.setValue(isoDate, true);
-			validateField(fieldName, { [fieldName]: isoDate });
+				helpers.setError(undefined);
 				setInputValue(format(parsed, 'P', { locale: detectedLocale }));
-		} else {
-				// Invalid date, clear it
-				helpers.setValue(null, true);
-			setInputValue('');
-			validateField(fieldName, { [fieldName]: null });
-		}
+			} else {
+				// Invalid date, show error and keep the input value
+				helpers.setError('Invalid date format');
+			}
 		},
-		[helpers, validateField, fieldName, parseShortcut, detectedLocale]
+		[helpers, parseShortcut, detectedLocale]
 	);
 
-	const errorState = meta.touched && Boolean(meta.error);
+	const errorState = Boolean(meta.error);
+	
+	const displayError = useMemo(() => {
+		if (meta.error) return meta.error;
+		return helperText;
+	}, [meta.error, helperText]);
 
 	const dateValue = useMemo(() => {
 		if (!field.value) return null;
@@ -350,10 +382,10 @@ export function FormDatePicker<R = Record<string, unknown>>({
 					onFocus={handleFocus}
 					onBlur={handleBlur}
 					error={errorState}
-					helperText={errorState ? meta.error : helperText}
+					helperText={displayError}
 					placeholder=""
 					sx={{ width: '200px', ...textFieldProps?.sx }}
-				slotProps={{
+					slotProps={{
 					input: {
 						sx: { width: '200px', ...textFieldProps?.sx },
 						endAdornment: (
