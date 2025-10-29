@@ -254,6 +254,19 @@ export function FormDatePicker<R = Record<string, unknown>>({
 				return;
 			}
 
+			// Validate numeric date formats before parsing
+			if (/^\d{1,2}\/\d{1,2}(\/\d{2,4})?$/.test(value)) {
+				const parts = value.split('/');
+				const month = parseInt(parts[0]);
+				const day = parseInt(parts[1]);
+				
+				// Validate month and day ranges
+				if (month < 1 || month > 12 || day < 1 || day > 31) {
+					helpers.setError('Invalid date format');
+					return;
+				}
+			}
+
 			// Try parsing with the full locale format first
 			let parsed = parse(value, 'P', new Date(), { locale: detectedLocale });
 			
