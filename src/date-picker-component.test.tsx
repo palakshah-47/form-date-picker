@@ -87,12 +87,28 @@ describe('FormDatePicker', () => {
 			});
 		});
 
-		it('should show error for invalid date', async () => {
+		it('should not show error while typing invalid date', async () => {
 			const user = userEvent.setup();
 			render(<FormDatePickerWrapper />);
 			const input = screen.getByLabelText('Test Date') as HTMLInputElement;
 
 			await user.type(input, 'invalid');
+
+			// Error should NOT be shown while typing
+			expect(screen.queryByText('Invalid date format')).not.toBeInTheDocument();
+		});
+
+		it('should show error for invalid date only after blur', async () => {
+			const user = userEvent.setup();
+			render(<FormDatePickerWrapper />);
+			const input = screen.getByLabelText('Test Date') as HTMLInputElement;
+
+			await user.type(input, 'invalid');
+			
+			// No error while typing
+			expect(screen.queryByText('Invalid date format')).not.toBeInTheDocument();
+			
+			// Error shows after blur
 			await user.tab();
 
 			await waitFor(() => {
@@ -100,16 +116,44 @@ describe('FormDatePicker', () => {
 			});
 		});
 
-		it('should show error for invalid date values like month 13', async () => {
+		it('should show error for invalid date values like month 13 only after blur', async () => {
 			const user = userEvent.setup();
 			render(<FormDatePickerWrapper />);
 			const input = screen.getByLabelText('Test Date') as HTMLInputElement;
 
 			await user.type(input, '13/45/2025');
+			
+			// No error while typing
+			expect(screen.queryByText('Invalid date format')).not.toBeInTheDocument();
+			
+			// Error shows after blur
 			await user.tab();
 
 			await waitFor(() => {
 				expect(screen.getByText('Invalid date format')).toBeInTheDocument();
+			});
+		});
+
+		it('should clear error when user starts typing again', async () => {
+			const user = userEvent.setup();
+			render(<FormDatePickerWrapper />);
+			const input = screen.getByLabelText('Test Date') as HTMLInputElement;
+
+			// Type invalid date and blur to show error
+			await user.type(input, 'invalid');
+			await user.tab();
+
+			await waitFor(() => {
+				expect(screen.getByText('Invalid date format')).toBeInTheDocument();
+			});
+
+			// Click back into field and start typing
+			await user.click(input);
+			await user.keyboard('1');
+
+			// Error should be cleared
+			await waitFor(() => {
+				expect(screen.queryByText('Invalid date format')).not.toBeInTheDocument();
 			});
 		});
 	});

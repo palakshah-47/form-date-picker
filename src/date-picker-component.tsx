@@ -133,46 +133,16 @@ export function FormDatePicker<R = Record<string, unknown>>({
 		return null;
 	}, []);
 
-	// Validate date input
-	const validateDateInput = useCallback((value: string): boolean => {
-		if (!value.trim()) {
-			helpers.setError(undefined);
-			return true;
-		}
-
-		// Check if it's a shortcut
-		const trimmed = value.trim().toLowerCase();
-		if (/^([dmy])(\d*)$/.test(trimmed)) {
-			helpers.setError(undefined);
-			return true;
-		}
-
-		// Check if it's a partial date format that will be auto-completed
-		if (/^\d{1,2}\/\d{1,2}(\/\d{0,4})?$/.test(value)) {
-			helpers.setError(undefined);
-			return true;
-		}
-
-		// Try parsing with the full locale format
-		const parsed = parse(value, 'P', new Date(), { locale: detectedLocale });
-		if (!isNaN(parsed.getTime())) {
-			helpers.setError(undefined);
-			return true;
-		}
-
-		// If we get here, it's invalid
-		helpers.setError('Invalid date format');
-		return false;
-	}, [detectedLocale, helpers]);
-
 	// Handle input change
 	const handleInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
 		const newValue = event.target.value;
 		setInputValue(newValue);
 		
-		// Validate as user types (only set error, don't prevent typing)
-		validateDateInput(newValue);
-	}, [validateDateInput]);
+		// Clear error while typing to allow user to correct without seeing error
+		if (meta.error) {
+			helpers.setError(undefined);
+		}
+	}, [meta.error, helpers]);
 
 	// Handle keyboard shortcuts
 	const handleKeyDown = useCallback(
@@ -264,6 +234,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 	const handleBlur = useCallback(
 		(event: React.FocusEvent<HTMLInputElement>) => {
 			setIsFocused(false);
+			helpers.setTouched(true);
 			const value = event.target.value.trim();
 
 			if (!value) {
@@ -321,12 +292,12 @@ export function FormDatePicker<R = Record<string, unknown>>({
 		[helpers, parseShortcut, detectedLocale]
 	);
 
-	const errorState = Boolean(meta.error);
+	const errorState = meta.touched && Boolean(meta.error);
 	
 	const displayError = useMemo(() => {
-		if (meta.error) return meta.error;
+		if (meta.touched && meta.error) return meta.error;
 		return helperText;
-	}, [meta.error, helperText]);
+	}, [meta.touched, meta.error, helperText]);
 
 	const dateValue = useMemo(() => {
 		if (!field.value) return null;
