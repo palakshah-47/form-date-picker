@@ -254,43 +254,43 @@ export function FormDatePicker<R = Record<string, unknown>>({
 				return;
 			}
 
-			// Validate numeric date formats before parsing
-			if (/^\d{1,2}\/\d{1,2}(\/\d{2,4})?$/.test(value)) {
-				const parts = value.split('/');
-				const month = parseInt(parts[0]);
-				const day = parseInt(parts[1]);
-				
-				// Validate month and day ranges
-				if (month < 1 || month > 12 || day < 1 || day > 31) {
-					helpers.setError('Invalid date format');
-					return;
-				}
-			}
-
-			// Try parsing with the full locale format first
-			let parsed = parse(value, 'P', new Date(), { locale: detectedLocale });
+		// Validate numeric date formats before parsing
+		if (/^\d{1,2}\/\d{1,2}(\/\d{2,4})?$/.test(value)) {
+			const parts = value.split('/');
+			const month = parseInt(parts[0]);
+			const day = parseInt(parts[1]);
 			
-			// If that fails, try parsing partial dates
-			if (isNaN(parsed.getTime())) {
-				const currentYear = new Date().getFullYear();
-				
-				// Handle formats like "4/5" -> "04/05/2025"
-				if (/^\d{1,2}\/\d{1,2}$/.test(value)) {
-					const [month, day] = value.split('/');
-					parsed = new Date(currentYear, parseInt(month) - 1, parseInt(day));
-				}
-				// Handle formats like "4/5/25" -> "04/05/2025"
-				else if (/^\d{1,2}\/\d{1,2}\/\d{2}$/.test(value)) {
-					const [month, day, year] = value.split('/');
-					const fullYear = parseInt(year) + 2000;
-					parsed = new Date(fullYear, parseInt(month) - 1, parseInt(day));
-				}
-				// Handle formats like "4/5/2025" -> "04/05/2025"
-				else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(value)) {
-					const [month, day, year] = value.split('/');
-					parsed = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-				}
+			// Validate month and day ranges
+			if (month < 1 || month > 12 || day < 1 || day > 31) {
+				helpers.setError('Invalid date format');
+				return;
 			}
+		}
+
+		let parsed: Date;
+		const currentYear = new Date().getFullYear();
+		
+		// Handle specific date patterns first to avoid ambiguity
+		// Handle formats like "4/5" -> "04/05/2025"
+		if (/^\d{1,2}\/\d{1,2}$/.test(value)) {
+			const [month, day] = value.split('/');
+			parsed = new Date(currentYear, parseInt(month) - 1, parseInt(day));
+		}
+		// Handle formats like "4/5/23" -> "04/05/2023" (2-digit year)
+		else if (/^\d{1,2}\/\d{1,2}\/\d{2}$/.test(value)) {
+			const [month, day, year] = value.split('/');
+			const fullYear = parseInt(year) + 2000;
+			parsed = new Date(fullYear, parseInt(month) - 1, parseInt(day));
+		}
+		// Handle formats like "4/5/2025" -> "04/05/2025" (4-digit year)
+		else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(value)) {
+			const [month, day, year] = value.split('/');
+			parsed = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+		}
+		// Fall back to locale-specific parsing for other formats
+		else {
+			parsed = parse(value, 'P', new Date(), { locale: detectedLocale });
+		}
 			
 			if (!isNaN(parsed.getTime())) {
 				const isoDate = parsed.toISOString();
@@ -374,10 +374,13 @@ export function FormDatePicker<R = Record<string, unknown>>({
 						sx: { width: '200px', ...textFieldProps?.sx },
 						endAdornment: (
 							<InputAdornment position="end">
-								{inputValue && (
+								{inputValue && isFocused && (
 									<IconButton
 										size="small"
-										onClick={clearDate}
+										onMouseDown={(e) => {
+											e.preventDefault(); // Prevent blur
+											clearDate();
+										}}
 										edge="end"
 										sx={{ mr: 0.5 }}
 										tabIndex={-1}

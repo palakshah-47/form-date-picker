@@ -73,19 +73,32 @@ describe('FormDatePicker', () => {
 			expect(input.value).toBe('10/28/2025');
 		});
 
-		it('should parse partial date on blur (4/5 -> 04/05/2025)', async () => {
-			const user = userEvent.setup();
-			render(<FormDatePickerWrapper />);
-			const input = screen.getByLabelText('Test Date') as HTMLInputElement;
+	it('should parse partial date on blur (4/5 -> 04/05/2025)', async () => {
+		const user = userEvent.setup();
+		render(<FormDatePickerWrapper />);
+		const input = screen.getByLabelText('Test Date') as HTMLInputElement;
 
-			await user.type(input, '4/5');
-			await user.tab();
+		await user.type(input, '4/5');
+		await user.tab();
 
-			await waitFor(() => {
-				const currentYear = new Date().getFullYear();
-				expect(input.value).toBe(`04/05/${currentYear}`);
-			});
+		await waitFor(() => {
+			const currentYear = new Date().getFullYear();
+			expect(input.value).toBe(`04/05/${currentYear}`);
 		});
+	});
+
+	it('should parse 2-digit year correctly (4/5/23 -> 04/05/2023)', async () => {
+		const user = userEvent.setup();
+		render(<FormDatePickerWrapper />);
+		const input = screen.getByLabelText('Test Date') as HTMLInputElement;
+
+		await user.type(input, '4/5/23');
+		await user.tab();
+
+		await waitFor(() => {
+			expect(input.value).toBe('04/05/2023');
+		});
+	});
 
 		it('should not show error while typing invalid date', async () => {
 			const user = userEvent.setup();
@@ -273,37 +286,35 @@ describe('FormDatePicker', () => {
 			});
 		});
 
-		it('should handle "m1" shortcut for one month from now', async () => {
-			const user = userEvent.setup();
-			render(<FormDatePickerWrapper />);
-			const input = screen.getByLabelText('Test Date') as HTMLInputElement;
+	it('should handle "m1" shortcut for one month from now', async () => {
+		const user = userEvent.setup();
+		render(<FormDatePickerWrapper />);
+		const input = screen.getByLabelText('Test Date') as HTMLInputElement;
 
-			await user.type(input, 'm1');
-			await user.tab();
+		await user.type(input, 'm1');
+		await user.tab();
 
-			await waitFor(() => {
-				const nextMonth = new Date();
-				nextMonth.setMonth(nextMonth.getMonth() + 1);
-				const formatted = format(nextMonth, 'P');
-				expect(input.value).toBe(formatted);
-			});
+		await waitFor(() => {
+			const nextMonth = addMonths(new Date(), 1);
+			const formatted = format(nextMonth, 'P');
+			expect(input.value).toBe(formatted);
 		});
+	});
 
-		it('should handle "y1" shortcut for one year from now', async () => {
-			const user = userEvent.setup();
-			render(<FormDatePickerWrapper />);
-			const input = screen.getByLabelText('Test Date') as HTMLInputElement;
+	it('should handle "y1" shortcut for one year from now', async () => {
+		const user = userEvent.setup();
+		render(<FormDatePickerWrapper />);
+		const input = screen.getByLabelText('Test Date') as HTMLInputElement;
 
-			await user.type(input, 'y1');
-			await user.tab();
+		await user.type(input, 'y1');
+		await user.tab();
 
-			await waitFor(() => {
-				const nextYear = new Date();
-				nextYear.setFullYear(nextYear.getFullYear() + 1);
-				const formatted = format(nextYear, 'P');
-				expect(input.value).toBe(formatted);
-			});
+		await waitFor(() => {
+			const nextYear = addYears(new Date(), 1);
+			const formatted = format(nextYear, 'P');
+			expect(input.value).toBe(formatted);
 		});
+	});
 	});
 
 	describe('Keyboard Shortcuts - Navigation', () => {
