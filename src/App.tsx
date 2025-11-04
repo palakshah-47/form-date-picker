@@ -1,5 +1,5 @@
 import React from 'react';
-import { FormDatePicker } from './original-date-picker.component';
+import { FormDatePicker } from './date-picker-component';
 import { Form, Formik } from 'formik';
 import { format } from 'date-fns';
 
@@ -17,12 +17,6 @@ export default function App() {
 			<h1>Welcome to form-date-picker</h1>
 			<Formik
 				initialValues={initialValues}
-				validate={(values) => {
-					const errors: Partial<Record<keyof FormValues, string>> = {};
-					if (!values.startDate) errors.startDate = 'Start date is required';
-
-					return errors;
-				}}
 				onSubmit={(values) => {
 					alert(
 						`Submitted!\nStart: ${
