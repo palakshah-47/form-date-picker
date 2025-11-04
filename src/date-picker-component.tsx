@@ -63,8 +63,22 @@ export function FormDatePicker<R = Record<string, unknown>>({
 	const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 	const [isFocused, setIsFocused] = useState(false);
 	const inputRef = useRef<HTMLInputElement | null>(null);
+	const shouldFocusOnClose = useRef(false);
 
 	const open = Boolean(anchorEl);
+
+	// Handle focus restoration when Popover closes after date selection
+	React.useEffect(() => {
+		if (!open && shouldFocusOnClose.current && inputRef.current) {
+			shouldFocusOnClose.current = false;
+			// Use requestAnimationFrame to ensure Popover's focus management completes first
+			requestAnimationFrame(() => {
+				if (inputRef.current) {
+					inputRef.current.focus();
+				}
+			});
+		}
+	}, [open]);
 
 	// Sync input value with field value when field changes externally
 	React.useEffect(() => {
@@ -91,12 +105,8 @@ export function FormDatePicker<R = Record<string, unknown>>({
 			}
 
 			// Close calendar and return focus
+			shouldFocusOnClose.current = true;
 			setAnchorEl(null);
-			setTimeout(() => {
-				if (inputRef.current) {
-					inputRef.current.focus();
-				}
-			}, 0);
 		},
 		[helpers, detectedLocale]
 	);
@@ -198,14 +208,12 @@ export function FormDatePicker<R = Record<string, unknown>>({
 					setInputValue(format(shortcutDate, 'P', { locale: detectedLocale }));
 					
 					// Move to next field
-					setTimeout(() => {
-						const form = input.form;
-						if (form) {
-							const inputs = Array.from(form.querySelectorAll('input, select, textarea, button'));
-							const nextInput = inputs[inputs.indexOf(input) + 1] as HTMLElement;
-							if (nextInput) nextInput.focus();
-						}
-					}, 0);
+					const form = input.form;
+					if (form) {
+						const inputs = Array.from(form.querySelectorAll('input, select, textarea, button'));
+						const nextInput = inputs[inputs.indexOf(input) + 1] as HTMLElement;
+						if (nextInput) nextInput.focus();
+					}
 				}
 			}
 
