@@ -63,22 +63,8 @@ export function FormDatePicker<R = Record<string, unknown>>({
 	const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 	const [isFocused, setIsFocused] = useState(false);
 	const inputRef = useRef<HTMLInputElement | null>(null);
-	const shouldFocusOnClose = useRef(false);
 
 	const open = Boolean(anchorEl);
-
-	// Handle focus restoration when Popover closes after date selection
-	React.useEffect(() => {
-		if (!open && shouldFocusOnClose.current && inputRef.current) {
-			shouldFocusOnClose.current = false;
-			// Use requestAnimationFrame to ensure Popover's focus management completes first
-			requestAnimationFrame(() => {
-				if (inputRef.current) {
-					inputRef.current.focus();
-				}
-			});
-		}
-	}, [open]);
 
 	// Sync input value with field value when field changes externally
 	React.useEffect(() => {
@@ -105,8 +91,12 @@ export function FormDatePicker<R = Record<string, unknown>>({
 			}
 
 			// Close calendar and return focus
-			shouldFocusOnClose.current = true;
 			setAnchorEl(null);
+			setTimeout(() => {
+				if (inputRef.current) {
+					inputRef.current.focus();
+				}
+			}, 0);
 		},
 		[helpers, detectedLocale]
 	);
@@ -198,7 +188,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 
 			// Tab: Process shortcuts
 			if (event.key === 'Tab') {
-				const inputValue = input.value.trim();
+				const inputValue = input?.value?.trim();
 				const shortcutDate = parseShortcut(inputValue);
 				if (shortcutDate) {
 					event.preventDefault();
@@ -208,12 +198,14 @@ export function FormDatePicker<R = Record<string, unknown>>({
 					setInputValue(format(shortcutDate, 'P', { locale: detectedLocale }));
 					
 					// Move to next field
-					const form = input.form;
-					if (form) {
-						const inputs = Array.from(form.querySelectorAll('input, select, textarea, button'));
-						const nextInput = inputs[inputs.indexOf(input) + 1] as HTMLElement;
-						if (nextInput) nextInput.focus();
-					}
+					setTimeout(() => {
+						const form = input.form;
+						if (form) {
+							const inputs = Array.from(form.querySelectorAll('input, select, textarea, button'));
+							const nextInput = inputs[inputs.indexOf(input) + 1] as HTMLElement;
+							if (nextInput) nextInput.focus();
+						}
+					}, 0);
 				}
 			}
 
@@ -262,52 +254,93 @@ export function FormDatePicker<R = Record<string, unknown>>({
 				return;
 			}
 
-		// Validate numeric date formats before parsing
-		if (/^\d{1,2}\/\d{1,2}(\/\d{2,4})?$/.test(value)) {
-			const parts = value.split('/');
-			const month = parseInt(parts[0]);
-			const day = parseInt(parts[1]);
-			
-			// Validate month and day ranges
-			if (month < 1 || month > 12 || day < 1 || day > 31) {
-				helpers.setError('Invalid date format');
-				return;
+			// Validate numeric date formats before parsing
+			if (/^\d{1,2}\/\d{1,2}(\/\d{2,4})?$/.test(value)) {
+				const parts = value.split('/');
+				const month = parseInt(parts[0]);
+				const day = parseInt(parts[1]);
+				
+				// Validate month and day ranges
+				if (month < 1 || month > 12 || day < 1 || day > 31) {
+					helpers.setTouched(true);
+					// Set error asynchronously to ensure it persists after Formik's validation cycle
+					setTimeout(() => {
+						helpers.setError('Invalid date format');
+					}, 0);
+					return;
+				}
 			}
-		}
 
-		let parsed: Date;
-		const currentYear = new Date().getFullYear();
-		
-		// Handle specific date patterns first to avoid ambiguity
-		// Handle formats like "4/5" -> "04/05/2025"
-		if (/^\d{1,2}\/\d{1,2}$/.test(value)) {
-			const [month, day] = value.split('/');
-			parsed = new Date(currentYear, parseInt(month) - 1, parseInt(day));
-		}
-		// Handle formats like "4/5/23" -> "04/05/2023" (2-digit year)
-		else if (/^\d{1,2}\/\d{1,2}\/\d{2}$/.test(value)) {
-			const [month, day, year] = value.split('/');
-			const fullYear = parseInt(year) + 2000;
-			parsed = new Date(fullYear, parseInt(month) - 1, parseInt(day));
-		}
-		// Handle formats like "4/5/2025" -> "04/05/2025" (4-digit year)
-		else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(value)) {
-			const [month, day, year] = value.split('/');
-			parsed = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-		}
-		// Fall back to locale-specific parsing for other formats
-		else {
-			parsed = parse(value, 'P', new Date(), { locale: detectedLocale });
-		}
+			let parsed: Date | null = null;
+			const currentYear = new Date().getFullYear();
+			let isValid = false;
 			
-			if (!isNaN(parsed.getTime())) {
+			// Handle specific date patterns first to avoid ambiguity
+			// Handle formats like "4/5" -> "04/05/2025"
+			if (/^\d{1,2}\/\d{1,2}$/.test(value)) {
+				const [month, day] = value.split('/');
+				parsed = new Date(currentYear, parseInt(month) - 1, parseInt(day));
+				isValid = !isNaN(parsed.getTime());
+			}
+			// Handle formats like "4/5/23" -> "04/05/2023" (2-digit year)
+			else if (/^\d{1,2}\/\d{1,2}\/\d{2}$/.test(value)) {
+				const [month, day, year] = value.split('/');
+				const fullYear = parseInt(year) + 2000;
+				parsed = new Date(fullYear, parseInt(month) - 1, parseInt(day));
+				isValid = !isNaN(parsed.getTime());
+			}
+			// Handle formats like "4/5/2025" -> "04/05/2025" (4-digit year)
+			else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(value)) {
+				const [month, day, year] = value.split('/');
+				parsed = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+				isValid = !isNaN(parsed.getTime());
+			}
+			// Fall back to locale-specific parsing for other formats
+			else {
+				// Check if input contains any non-date-like characters (for simple text like "abc")
+				if (!/[\d\/\-\s,]+/.test(value)) {
+					helpers.setTouched(true);
+					// Set error asynchronously to ensure it persists after Formik's validation cycle
+					setTimeout(() => {
+						helpers.setError('Invalid date format');
+					}, 0);
+					return;
+				}
+				parsed = parse(value, 'P', new Date(), { locale: detectedLocale });
+				isValid = !isNaN(parsed.getTime());
+				
+				// Additional check: verify the parsed date can be formatted back to the same format
+				if (isValid) {
+					const formattedBack = format(parsed, 'P', { locale: detectedLocale });
+					const isNumericPattern = /^\d{1,2}\/\d{1,2}(\/\d{2,4})?$/.test(value);
+					if (!isNumericPattern && formattedBack.toLowerCase() !== value.toLowerCase()) {
+						isValid = false;
+					}
+				}
+				
+				// If validation failed during format check, set error
+				if (!isValid) {
+					helpers.setTouched(true);
+					setTimeout(() => {
+						helpers.setError('Invalid date format');
+					}, 0);
+					return;
+				}
+			}
+				
+			if (isValid && parsed) {
 				const isoDate = parsed.toISOString();
 				helpers.setValue(isoDate, true);
 				helpers.setError(undefined);
 				setInputValue(format(parsed, 'P', { locale: detectedLocale }));
 			} else {
 				// Invalid date, show error and keep the input value
-				helpers.setError('Invalid date format');
+				// Use setTimeout to ensure error is set after Formik's internal validation completes
+				helpers.setTouched(true);
+				// Set error asynchronously to ensure it persists after Formik's validation cycle
+				setTimeout(() => {
+					helpers.setError('Invalid date format');
+				}, 0);
 			}
 		},
 		[helpers, parseShortcut, detectedLocale]
@@ -316,9 +349,27 @@ export function FormDatePicker<R = Record<string, unknown>>({
 	const errorState = meta.touched && Boolean(meta.error);
 	
 	const displayError = useMemo(() => {
-		if (meta.touched && meta.error) return meta.error;
-		return helperText;
+		// Prioritize field-level errors set via helpers.setError()
+		// meta.error comes from helpers.setError() and should be displayed when field is touched
+		if (meta.touched && meta.error) {
+			return meta.error;
+		}
+		// Fall back to helperText prop from parent (Formik validation errors)
+		return helperText || '';
 	}, [meta.touched, meta.error, helperText]);
+	
+	// Debug logging (remove in production)
+	React.useEffect(() => {
+		if (meta.touched) {
+			console.log('FormDatePicker Debug:', {
+				touched: meta.touched,
+				error: meta.error,
+				errorState,
+				displayError,
+				helperText,
+			});
+		}
+	}, [meta.touched, meta.error, errorState, displayError, helperText]);
 
 	const dateValue = useMemo(() => {
 		if (!field.value) return null;
