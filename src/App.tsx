@@ -1,5 +1,5 @@
 import React from 'react';
-import { FormDatePicker } from './date-picker-component';
+import { FormDatePicker } from './original-date-picker.component';
 import { Form, Formik } from 'formik';
 import { format } from 'date-fns';
 
