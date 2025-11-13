@@ -46,6 +46,8 @@ export interface FormDatePickerProps<R = Record<string, unknown>> {
 	label?: string;
 	helperText?: string;
 	locale?: Locale;
+	defaultValue?: string;
+	disabled?: boolean;
 	textFieldProps?: Partial<TextFieldProps>;
 }
 
@@ -54,6 +56,8 @@ export function FormDatePicker<R = Record<string, unknown>>({
 	label,
 	helperText,
 	locale,
+	defaultValue,
+	disabled,
 	textFieldProps,
 }: FormDatePickerProps<R>) {
 	const detectedLocale = locale || getLocaleFromBrowser();
@@ -367,6 +371,8 @@ export function FormDatePicker<R = Record<string, unknown>>({
 					onBlur={handleBlur}
 					error={errorState}
 					helperText={displayError}
+					disabled={disabled}
+					defaultValue={defaultValue}
 					placeholder=""
 					sx={{ width: '200px', ...textFieldProps?.sx }}
 					slotProps={{
@@ -393,6 +399,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 									onClick={(e) => setAnchorEl(e.currentTarget)}
 									edge="end"
 									tabIndex={-1}
+									disabled={disabled}
 								>
 									<CalendarIcon />
 								</IconButton>

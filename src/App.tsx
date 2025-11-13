@@ -8,7 +8,7 @@ interface FormValues {
 }
 
 const initialValues: FormValues = {
-	startDate: "1/1/2022",
+	startDate: "2024-09-06T00:00:00.000Z",
 };
 
 export default function App() {
@@ -37,9 +37,14 @@ export default function App() {
 						<FormDatePicker<FormValues>
 							fieldName="startDate"
 							label="Start Date"
+							defaultValue={initialValues.startDate ?? ""}
+							disabled={false}
 							helperText={
 								touched.startDate && errors.startDate ? errors.startDate : ''
 							}
+							textFieldProps={{
+								required: true,
+							}}
 						/>
 
 						<button type="submit">Submit</button>
