@@ -34,16 +34,25 @@ export default function App() {
 				{({ handleSubmit, errors, touched }) => (
 					<Form onSubmit={handleSubmit} noValidate>
 						{/* ✅ Start Date Field */}
+						{/* 
+							You can use either initialValues (via Formik) or defaultValue (via textFieldProps).
+							If defaultValue is provided, it takes precedence over initialValues.
+							Example with defaultValue:
+							textFieldProps={{
+								required: true,
+								defaultValue: "2024-10-15T00:00:00.000Z" // This will override initialValues.startDate
+							}}
+						*/}
 						<FormDatePicker<FormValues>
 							fieldName="startDate"
-							label="Start Date"
-							defaultValue={initialValues.startDate ?? ""}
+							label="Start Date"							
 							disabled={false}
 							helperText={
 								touched.startDate && errors.startDate ? errors.startDate : ''
 							}
 							textFieldProps={{
 								required: true,
+								defaultValue: "2024-10-15T00:00:00.000Z"
 							}}
 						/>
 

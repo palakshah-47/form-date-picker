@@ -45,8 +45,7 @@ export interface FormDatePickerProps<R = Record<string, unknown>> {
 	fieldName: keyof R & string;
 	label?: string;
 	helperText?: string;
-	locale?: Locale;
-	defaultValue?: string;
+	locale?: Locale;	
 	disabled?: boolean;
 	textFieldProps?: Partial<TextFieldProps>;
 }
@@ -55,8 +54,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 	fieldName,
 	label,
 	helperText,
-	locale,
-	defaultValue,
+	locale,	
 	disabled,
 	textFieldProps,
 }: FormDatePickerProps<R>) {
@@ -69,6 +67,21 @@ export function FormDatePicker<R = Record<string, unknown>>({
 	const inputRef = useRef<HTMLInputElement | null>(null);
 
 	const open = Boolean(anchorEl);
+
+	// Extract defaultValue from textFieldProps if provided
+	const defaultValue = textFieldProps?.defaultValue;
+
+	// Initialize field value with defaultValue if provided (takes precedence over initialValues)
+	React.useEffect(() => {
+		if (defaultValue !== undefined) {
+			// defaultValue can be a string (ISO date), empty string, or null
+			const dateValue = typeof defaultValue === 'string' && defaultValue.trim() !== '' 
+				? defaultValue 
+				: null;
+			helpers.setValue(dateValue, false);
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []); // Only run on mount - defaultValue takes precedence over initialValues
 
 	// Sync input value with field value when field changes externally
 	React.useEffect(() => {
@@ -192,7 +205,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 
 			// Tab: Process shortcuts
 			if (event.key === 'Tab') {
-				const inputValue = input.value.trim();
+				const inputValue = input.value?.trim();
 				const shortcutDate = parseShortcut(inputValue);
 				if (shortcutDate) {
 					event.preventDefault();
@@ -321,6 +334,15 @@ export function FormDatePicker<R = Record<string, unknown>>({
 		return new Date(field.value);
 	}, [field.value]);
 
+	// Filter out conflicting props from textFieldProps since we're using Formik (controlled mode)
+	// Remove defaultValue and value to avoid conflicts with controlled input
+	// defaultValue is extracted above and used to initialize the field value
+	const sanitizedTextFieldProps = useMemo(() => {
+		if (!textFieldProps) return {};
+		const { defaultValue, value, ...rest } = textFieldProps;
+		return rest;
+	}, [textFieldProps]);
+
 	const tooltipTitle = useMemo(() => {
 		const today = new Date();
 		const todayFormatted = format(today, 'P', { locale: detectedLocale });
@@ -361,7 +383,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 				}}
 			>
 				<TextField
-					{...textFieldProps}
+					{...sanitizedTextFieldProps}
 					label={label}
 					inputRef={inputRef}
 					value={inputValue}
@@ -372,12 +394,12 @@ export function FormDatePicker<R = Record<string, unknown>>({
 					error={errorState}
 					helperText={displayError}
 					disabled={disabled}
-					defaultValue={defaultValue}
+					
 					placeholder=""
-					sx={{ width: '200px', ...textFieldProps?.sx }}
+					sx={{ width: '200px', ...sanitizedTextFieldProps?.sx }}
 					slotProps={{
 					input: {
-						sx: { width: '200px', ...textFieldProps?.sx },
+						sx: { width: '200px', ...sanitizedTextFieldProps?.sx },
 						endAdornment: (
 							<InputAdornment position="end">
 								{inputValue && isFocused && (
