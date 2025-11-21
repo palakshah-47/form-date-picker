@@ -8,6 +8,50 @@ import { Locale, format, parse, addMonths, addYears } from 'date-fns';
 import { enUS, enGB, fr, de, es, it, ja, zhCN, zhTW, ptBR } from 'date-fns/locale';
 import dayjs from 'dayjs';
 
+/**
+ * Converts a Date object to ISO string at UTC midnight (00:00:00.000Z)
+ * This ensures the date doesn't shift when converted to UTC
+ */
+function dateToISOString(date: Date): string {
+	const year = date.getFullYear();
+	const month = date.getMonth();
+	const day = date.getDate();
+	// Create date at UTC midnight to avoid timezone shifts
+	const utcDate = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+	return utcDate.toISOString();
+}
+
+/**
+ * Parses an ISO date string and extracts only the date part (YYYY-MM-DD)
+ * Returns a Date object at UTC noon to avoid timezone shifts when displaying
+ */
+function parseDateFromISO(isoString: string): Date | null {
+	if (!isoString || typeof isoString !== 'string') return null;
+	
+	try {
+		// Extract date part (YYYY-MM-DD) from ISO string
+		const dateMatch = isoString.match(/^(\d{4}-\d{2}-\d{2})/);
+		if (!dateMatch) return null;
+		
+		const [year, month, day] = dateMatch[1].split('-').map(Number);
+		
+		// Create date at UTC noon to avoid timezone shifts when displaying
+		// Using noon instead of midnight prevents date shifts in timezones ahead of UTC
+		return new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Extracts date-only string (YYYY-MM-DD) from ISO string
+ */
+function extractDateOnly(isoString: string): string | null {
+	if (!isoString || typeof isoString !== 'string') return null;
+	const dateMatch = isoString.match(/^(\d{4}-\d{2}-\d{2})/);
+	return dateMatch ? dateMatch[1] : null;
+}
+
 // Simple SVG icons
 const CalendarIcon = () => (
 	<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -75,10 +119,18 @@ export function FormDatePicker<R = Record<string, unknown>>({
 	React.useEffect(() => {
 		if (defaultValue !== undefined) {
 			// defaultValue can be a string (ISO date), empty string, or null
-			const dateValue = typeof defaultValue === 'string' && defaultValue.trim() !== '' 
-				? defaultValue 
-				: null;
-			helpers.setValue(dateValue, false);
+			if (typeof defaultValue === 'string' && defaultValue.trim() !== '') {
+				// Normalize to UTC midnight to avoid timezone issues
+				const parsedDate = parseDateFromISO(defaultValue);
+				if (parsedDate) {
+					const normalizedISO = dateToISOString(parsedDate);
+					helpers.setValue(normalizedISO, false);
+				} else {
+					helpers.setValue(null, false);
+				}
+			} else {
+				helpers.setValue(null, false);
+			}
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []); // Only run on mount - defaultValue takes precedence over initialValues
@@ -86,8 +138,14 @@ export function FormDatePicker<R = Record<string, unknown>>({
 	// Sync input value with field value when field changes externally
 	React.useEffect(() => {
 		if (field.value) {
-			const formatted = format(new Date(field.value), 'P', { locale: detectedLocale });
-			setInputValue(formatted);
+			// Parse date from ISO string (extracts date-only, uses UTC noon to avoid shifts)
+			const parsedDate = parseDateFromISO(field.value);
+			if (parsedDate) {
+				const formatted = format(parsedDate, 'P', { locale: detectedLocale });
+				setInputValue(formatted);
+			} else {
+				setInputValue('');
+			}
 		} else {
 			setInputValue('');
 		}
@@ -96,7 +154,8 @@ export function FormDatePicker<R = Record<string, unknown>>({
 	// Handle calendar date selection
 	const handleDateChange = useCallback(
 		(date: Date | null) => {
-			const dateValue = date ? date.toISOString() : null;
+			// Convert to UTC midnight ISO string to avoid timezone shifts
+			const dateValue = date ? dateToISOString(date) : null;
 			helpers.setValue(dateValue, true);
 			helpers.setError(undefined);
 
@@ -171,16 +230,18 @@ export function FormDatePicker<R = Record<string, unknown>>({
 			if (event.ctrlKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
 				event.preventDefault();
 				if (currentValue) {
-					const currentDate = new Date(currentValue);
-					const newDate =
-						event.key === 'ArrowLeft'
-							? addMonths(currentDate, -1)
-							: addMonths(currentDate, 1);
+					const currentDate = parseDateFromISO(currentValue);
+					if (currentDate) {
+						const newDate =
+							event.key === 'ArrowLeft'
+								? addMonths(currentDate, -1)
+								: addMonths(currentDate, 1);
 
-					const isoDate = newDate.toISOString();
-					helpers.setValue(isoDate, true);
-					helpers.setError(undefined);
-					setInputValue(format(newDate, 'P', { locale: detectedLocale }));
+						const isoDate = dateToISOString(newDate);
+						helpers.setValue(isoDate, true);
+						helpers.setError(undefined);
+						setInputValue(format(newDate, 'P', { locale: detectedLocale }));
+					}
 				}
 				return;
 			}
@@ -189,16 +250,18 @@ export function FormDatePicker<R = Record<string, unknown>>({
 			if (event.ctrlKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
 				event.preventDefault();
 				if (currentValue) {
-					const currentDate = new Date(currentValue);
-					const newDate =
-						event.key === 'ArrowUp'
-							? addYears(currentDate, 1)
-							: addYears(currentDate, -1);
+					const currentDate = parseDateFromISO(currentValue);
+					if (currentDate) {
+						const newDate =
+							event.key === 'ArrowUp'
+								? addYears(currentDate, 1)
+								: addYears(currentDate, -1);
 
-					const isoDate = newDate.toISOString();
-					helpers.setValue(isoDate, true);
-					helpers.setError(undefined);
-					setInputValue(format(newDate, 'P', { locale: detectedLocale }));
+						const isoDate = dateToISOString(newDate);
+						helpers.setValue(isoDate, true);
+						helpers.setError(undefined);
+						setInputValue(format(newDate, 'P', { locale: detectedLocale }));
+					}
 				}
 				return;
 			}
@@ -209,7 +272,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 				const shortcutDate = parseShortcut(inputValue);
 				if (shortcutDate) {
 					event.preventDefault();
-					const isoDate = shortcutDate.toISOString();
+					const isoDate = dateToISOString(shortcutDate);
 					helpers.setValue(isoDate, true);
 					helpers.setError(undefined);
 					setInputValue(format(shortcutDate, 'P', { locale: detectedLocale }));
@@ -232,7 +295,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 				const shortcutDate = parseShortcut(inputValue);
 				if (shortcutDate) {
 					event.preventDefault();
-					const isoDate = shortcutDate.toISOString();
+					const isoDate = dateToISOString(shortcutDate);
 					helpers.setValue(isoDate, true);
 					helpers.setError(undefined);
 					setInputValue(format(shortcutDate, 'P', { locale: detectedLocale }));
@@ -264,7 +327,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 			// Try shortcut parsing first
 			const shortcutDate = parseShortcut(value);
 			if (shortcutDate) {
-				const isoDate = shortcutDate.toISOString();
+				const isoDate = dateToISOString(shortcutDate);
 				helpers.setValue(isoDate, true);
 				helpers.setError(undefined);
 				setInputValue(format(shortcutDate, 'P', { locale: detectedLocale }));
@@ -310,7 +373,8 @@ export function FormDatePicker<R = Record<string, unknown>>({
 		}
 			
 			if (!isNaN(parsed.getTime())) {
-				const isoDate = parsed.toISOString();
+				// Convert to UTC midnight to avoid timezone shifts
+				const isoDate = dateToISOString(parsed);
 				helpers.setValue(isoDate, true);
 				helpers.setError(undefined);
 				setInputValue(format(parsed, 'P', { locale: detectedLocale }));
@@ -331,7 +395,8 @@ export function FormDatePicker<R = Record<string, unknown>>({
 
 	const dateValue = useMemo(() => {
 		if (!field.value) return null;
-		return new Date(field.value);
+		// Parse date from ISO string (extracts date-only, uses UTC noon to avoid shifts)
+		return parseDateFromISO(field.value);
 	}, [field.value]);
 
 	// Filter out conflicting props from textFieldProps since we're using Formik (controlled mode)

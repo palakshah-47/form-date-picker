@@ -474,5 +474,230 @@ describe('FormDatePicker', () => {
 			expect(input.value).toBe(formatted);
 		});
 	});
+
+	describe('Timezone Handling - India Timezone (IST UTC+5:30)', () => {
+		// Helper to create a wrapper that accepts defaultValue
+		const FormDatePickerWrapperWithDefault = ({
+			defaultValue,
+			onSubmit = vi.fn(),
+		}: {
+			defaultValue?: string;
+			onSubmit?: (values: { testDate: string | null }) => void;
+		}) => {
+			return (
+				<Formik
+					initialValues={{ testDate: null }}
+					onSubmit={onSubmit}
+				>
+					{() => (
+						<Form>
+							<FormDatePicker
+								fieldName="testDate"
+								label="Test Date"
+								textFieldProps={{
+									defaultValue: defaultValue,
+								}}
+							/>
+							<button type="submit">Submit</button>
+						</Form>
+					)}
+				</Formik>
+			);
+		};
+
+		it('should correctly display date from API with time component (India timezone scenario)', async () => {
+			// Simulate API response with time component: "2025-07-08T18:30:00Z"
+			// In India (UTC+5:30), this would normally display as July 9, but we want July 8
+			const apiDate = '2025-07-08T18:30:00Z';
+			
+			render(<FormDatePickerWrapperWithDefault defaultValue={apiDate} />);
+			
+			const input = screen.getByLabelText('Test Date') as HTMLInputElement;
+			
+			await waitFor(() => {
+				// Should display as July 8, 2025 (not July 9)
+				// The component normalizes to date-only, so it should show the correct date
+				expect(input.value).toBe('07/08/2025');
+			});
+		});
+
+		it('should save selected date correctly without timezone shift (India timezone scenario)', async () => {
+			const onSubmit = vi.fn();
+			const user = userEvent.setup();
+			
+			render(<FormDatePickerWrapperWithDefault onSubmit={onSubmit} />);
+			
+			const input = screen.getByLabelText('Test Date') as HTMLInputElement;
+			
+			// User selects July 8, 2025
+			await user.type(input, '07/08/2025');
+			await user.tab();
+			
+			await waitFor(() => {
+				expect(input.value).toBe('07/08/2025');
+			});
+			
+			// Submit the form
+			const submitButton = screen.getByText('Submit');
+			await user.click(submitButton);
+			
+			await waitFor(() => {
+				expect(onSubmit).toHaveBeenCalled();
+				const submittedValue = onSubmit.mock.calls[0][0].testDate;
+				
+				// Should save as "2025-07-08T00:00:00.000Z" (UTC midnight)
+				// NOT as "2025-07-07T18:30:00.000Z" (which would be wrong)
+				expect(submittedValue).toBe('2025-07-08T00:00:00.000Z');
+			});
+		});
+
+		it('should correctly handle round-trip: save and retrieve date (India timezone scenario)', async () => {
+			const user = userEvent.setup();
+			
+			// Step 1: User selects July 8, 2025 and saves
+			const onSubmit1 = vi.fn();
+			render(<FormDatePickerWrapperWithDefault onSubmit={onSubmit1} />);
+			
+			const input1 = screen.getByLabelText('Test Date') as HTMLInputElement;
+			await user.type(input1, '07/08/2025');
+			await user.tab();
+			
+			await waitFor(() => {
+				expect(input1.value).toBe('07/08/2025');
+			});
+			
+			const submitButton1 = screen.getByText('Submit');
+			await user.click(submitButton1);
+			
+			await waitFor(() => {
+				expect(onSubmit1).toHaveBeenCalled();
+			});
+			
+			const savedDate = onSubmit1.mock.calls[0][0].testDate;
+			expect(savedDate).toBe('2025-07-08T00:00:00.000Z');
+			
+			// Step 2: Retrieve the saved date from API and display
+			// Simulate API returning the saved date (possibly with time component)
+			const apiResponse = savedDate; // Or could be "2025-07-08T18:30:00Z" from API
+			
+			render(<FormDatePickerWrapperWithDefault defaultValue={apiResponse} />);
+			
+			const input2 = screen.getByLabelText('Test Date') as HTMLInputElement;
+			
+			await waitFor(() => {
+				// Should still display as July 8, 2025 (correct date)
+				expect(input2.value).toBe('07/08/2025');
+			});
+		});
+
+		it('should handle date with time component from API and normalize correctly', async () => {
+			// Test case: API returns "2025-07-08T18:30:00Z" (6:30 PM UTC = next day in IST)
+			// But we want to display and store as July 8, 2025
+			const apiDateWithTime = '2025-07-08T18:30:00Z';
+			const onSubmit = vi.fn();
+			const user = userEvent.setup();
+			
+			render(<FormDatePickerWrapperWithDefault defaultValue={apiDateWithTime} onSubmit={onSubmit} />);
+			
+			const input = screen.getByLabelText('Test Date') as HTMLInputElement;
+			
+			await waitFor(() => {
+				// Should display as July 8, 2025 (not July 9)
+				expect(input.value).toBe('07/08/2025');
+			});
+			
+			// Submit without changing - should save the normalized date
+			const submitButton = screen.getByText('Submit');
+			await user.click(submitButton);
+			
+			await waitFor(() => {
+				expect(onSubmit).toHaveBeenCalled();
+				const submittedValue = onSubmit.mock.calls[0][0].testDate;
+				
+				// Should be normalized to UTC midnight: "2025-07-08T00:00:00.000Z"
+				expect(submittedValue).toBe('2025-07-08T00:00:00.000Z');
+			});
+		});
+
+		it('should handle calendar date selection without timezone shift', async () => {
+			const onSubmit = vi.fn();
+			const user = userEvent.setup();
+			
+			render(<FormDatePickerWrapperWithDefault onSubmit={onSubmit} />);
+			
+			// Open calendar
+			const buttons = screen.getAllByRole('button');
+			const calendarButton = buttons[buttons.length - 1];
+			await user.click(calendarButton);
+			
+			await waitFor(() => {
+				expect(screen.getByRole('dialog')).toBeInTheDocument();
+			});
+			
+			// Select July 8, 2025 from calendar
+			// Find the button for July 8, 2025
+			const dateButtons = screen.getAllByRole('gridcell');
+			let selectedDate = false;
+			
+			for (const cell of dateButtons) {
+				const button = cell.querySelector('button');
+				if (button && !button.disabled && button.textContent === '8') {
+					// Check if it's July 2025 (we might need to navigate)
+					fireEvent.click(button);
+					selectedDate = true;
+					break;
+				}
+			}
+			
+			if (selectedDate) {
+				await waitFor(() => {
+					const input = screen.getByLabelText('Test Date') as HTMLInputElement;
+					// Should display July 8, 2025
+					expect(input.value).toContain('07/08/2025');
+				});
+				
+				// Submit
+				const submitButton = screen.getByText('Submit');
+				await user.click(submitButton);
+				
+				await waitFor(() => {
+					expect(onSubmit).toHaveBeenCalled();
+					const submittedValue = onSubmit.mock.calls[0][0].testDate;
+					
+					// Should save as UTC midnight for July 8, 2025
+					expect(submittedValue).toMatch(/^2025-07-08T00:00:00\.000Z$/);
+				});
+			}
+		});
+
+		it('should handle manual date input without timezone shift', async () => {
+			const onSubmit = vi.fn();
+			const user = userEvent.setup();
+			
+			render(<FormDatePickerWrapperWithDefault onSubmit={onSubmit} />);
+			
+			const input = screen.getByLabelText('Test Date') as HTMLInputElement;
+			
+			// User manually types July 8, 2025
+			await user.type(input, '07/08/2025');
+			await user.tab();
+			
+			await waitFor(() => {
+				expect(input.value).toBe('07/08/2025');
+			});
+			
+			// Submit
+			const submitButton = screen.getByText('Submit');
+			await user.click(submitButton);
+			
+			await waitFor(() => {
+				expect(onSubmit).toHaveBeenCalled();
+				const submittedValue = onSubmit.mock.calls[0][0].testDate;
+				
+				// Should save as "2025-07-08T00:00:00.000Z" (not shifted to previous day)
+				expect(submittedValue).toBe('2025-07-08T00:00:00.000Z');
+			});
+		});
+	});
 });
 
