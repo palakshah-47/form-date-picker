@@ -473,6 +473,142 @@ describe('FormDatePicker', () => {
 			const formatted = format(new Date(today), 'P');
 			expect(input.value).toBe(formatted);
 		});
+
+		it('should handle undefined initialValue correctly', () => {
+			render(<FormDatePickerWrapper initialValue={undefined} />);
+
+			const input = screen.getByLabelText('Test Date') as HTMLInputElement;
+			expect(input.value).toBe('');
+		});
+	});
+
+	describe('DefaultValue and InitialValue as Undefined', () => {
+		// Helper wrapper that accepts both defaultValue and initialValue
+		const FormDatePickerWrapperWithBoth = ({
+			defaultValue,
+			initialValue,
+			onSubmit = vi.fn(),
+		}: {
+			defaultValue?: string | undefined;
+			initialValue?: string | null | undefined;
+			onSubmit?: (values: { testDate: string | null }) => void;
+		}) => {
+			return (
+				<Formik
+					initialValues={{ testDate: initialValue }}
+					onSubmit={onSubmit}
+				>
+					{() => (
+						<Form>
+							<FormDatePicker
+								fieldName="testDate"
+								label="Test Date"
+								textFieldProps={{
+									defaultValue: defaultValue,
+								}}
+							/>
+							<button type="submit">Submit</button>
+						</Form>
+					)}
+				</Formik>
+			);
+		};
+
+		it('should handle undefined defaultValue and undefined initialValue', async () => {
+			const onSubmit = vi.fn();
+			const user = userEvent.setup();
+			
+			render(
+				<FormDatePickerWrapperWithBoth
+					defaultValue={undefined}
+					initialValue={undefined}
+					onSubmit={onSubmit}
+				/>
+			);
+
+			const input = screen.getByLabelText('Test Date') as HTMLInputElement;
+			
+			// Input should be empty initially
+			expect(input.value).toBe('');
+
+			// Component should still function normally - user can type a date
+			await user.type(input, '10/28/2025');
+			await user.tab();
+
+			await waitFor(() => {
+				expect(input.value).toBe('10/28/2025');
+			});
+
+			// Form should submit successfully.
+			const submitButton = screen.getByText('Submit');
+			await user.click(submitButton);
+
+			await waitFor(() => {
+				expect(onSubmit).toHaveBeenCalled();
+				const submittedValue = onSubmit.mock.calls[0][0].testDate;
+				expect(submittedValue).toBeTruthy();
+			});
+		});
+
+		it('should handle undefined defaultValue with null initialValue', async () => {
+			const onSubmit = vi.fn();
+			const user = userEvent.setup();
+			
+			render(
+				<FormDatePickerWrapperWithBoth
+					defaultValue={undefined}
+					initialValue={null}
+					onSubmit={onSubmit}
+				/>
+			);
+
+			const input = screen.getByLabelText('Test Date') as HTMLInputElement;
+			
+			// Input should be empty initially
+			expect(input.value).toBe('');
+
+			// Component should still function normally
+			await user.type(input, '12/25/2025');
+			await user.tab();
+
+			await waitFor(() => {
+				expect(input.value).toBe('12/25/2025');
+			});
+		});
+
+		it('should handle undefined defaultValue when initialValue is not provided', async () => {
+			const onSubmit = vi.fn();
+			const user = userEvent.setup();
+			
+			render(
+				<FormDatePickerWrapperWithBoth
+					defaultValue={undefined}
+					onSubmit={onSubmit}
+				/>
+			);
+
+			const input = screen.getByLabelText('Test Date') as HTMLInputElement;
+			
+			// Input should be empty initially
+			expect(input.value).toBe('');
+
+			// User should be able to interact with the component
+			await user.type(input, '01/15/2026');
+			await user.tab();
+
+			await waitFor(() => {
+				expect(input.value).toBe('01/15/2026');
+			});
+
+			// Calendar should still work
+			const buttons = screen.getAllByRole('button');
+			const calendarButton = buttons[buttons.length - 1];
+			await user.click(calendarButton);
+
+			await waitFor(() => {
+				expect(screen.getByRole('dialog')).toBeInTheDocument();
+			});
+		});
 	});
 
 	describe('Timezone Handling - India Timezone (IST UTC+5:30)', () => {

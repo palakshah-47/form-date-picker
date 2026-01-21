@@ -1,6 +1,7 @@
 import { TextField, TextFieldProps, InputAdornment, IconButton, Popover, Tooltip } from '@mui/material';
 import { DateCalendar, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { DateView } from '@mui/x-date-pickers/models';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useField } from 'formik';
 import React from 'react';
@@ -38,6 +39,39 @@ function parseDateFromISO(isoString: string): Date | null {
 		// Create date at UTC noon to avoid timezone shifts when displaying
 		// Using noon instead of midnight prevents date shifts in timezones ahead of UTC
 		return new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Parses a date string that can be either ISO format or localized format (MM/DD/YYYY)
+ * Supports formats like:
+ * - ISO: "2025-11-25" or "2025-11-25T18:30:00Z"
+ * - Localized: "11/25/2025" (from toLocaleDateString())
+ * Returns a Date object at UTC noon to avoid timezone shifts when displaying
+ */
+function parseDateString(dateString: string): Date | null {
+	if (!dateString || typeof dateString !== 'string') return null;
+	
+	try {
+		// Try ISO format first (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ)
+		const isoMatch = dateString.match(/^(\d{4}-\d{2}-\d{2})/);
+		if (isoMatch) {
+			const [year, month, day] = isoMatch[1].split('-').map(Number);
+			return new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+		}
+		
+		// Try localized format (MM/DD/YYYY or M/D/YYYY) - common format from toLocaleDateString()
+		const localizedMatch = dateString.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+		if (localizedMatch) {
+			const [, month, day, year] = localizedMatch.map(Number);
+			// Validate date components
+			if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+			return new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+		}
+		
+		return null;
 	} catch {
 		return null;
 	}
@@ -108,6 +142,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 	const [inputValue, setInputValue] = useState<string>('');
 	const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 	const [isFocused, setIsFocused] = useState(false);
+	const [calendarView, setCalendarView] = useState<DateView>('day');
 	const inputRef = useRef<HTMLInputElement | null>(null);
 
 	const open = Boolean(anchorEl);
@@ -118,10 +153,10 @@ export function FormDatePicker<R = Record<string, unknown>>({
 	// Initialize field value with defaultValue if provided (takes precedence over initialValues)
 	React.useEffect(() => {
 		if (defaultValue !== undefined) {
-			// defaultValue can be a string (ISO date), empty string, or null
+			// defaultValue can be a string (ISO date or localized date like "11/25/2025"), empty string, or null
 			if (typeof defaultValue === 'string' && defaultValue.trim() !== '') {
-				// Normalize to UTC midnight to avoid timezone issues
-				const parsedDate = parseDateFromISO(defaultValue);
+				// Parse date string (supports both ISO and localized formats)
+				const parsedDate = parseDateString(defaultValue);
 				if (parsedDate) {
 					const normalizedISO = dateToISOString(parsedDate);
 					helpers.setValue(normalizedISO, false);
@@ -137,9 +172,12 @@ export function FormDatePicker<R = Record<string, unknown>>({
 
 	// Sync input value with field value when field changes externally
 	React.useEffect(() => {
-		if (field.value) {
-			// Parse date from ISO string (extracts date-only, uses UTC noon to avoid shifts)
-			const parsedDate = parseDateFromISO(field.value);
+		// If field.value exists, use it; otherwise check defaultValue (only if it's a string)
+		const valueToUse = field.value ?? (typeof defaultValue === 'string' ? defaultValue : null);
+		
+		if (valueToUse) {
+			// Parse date from field value (supports both ISO and localized formats)
+			const parsedDate = parseDateString(valueToUse);
 			if (parsedDate) {
 				const formatted = format(parsedDate, 'P', { locale: detectedLocale });
 				setInputValue(formatted);
@@ -149,33 +187,52 @@ export function FormDatePicker<R = Record<string, unknown>>({
 		} else {
 			setInputValue('');
 		}
-	}, [field.value, detectedLocale]);
+	}, [field.value, defaultValue, detectedLocale]);
+
+	// Handle calendar view change (year -> month -> day)
+	const handleViewChange = useCallback((newView: DateView) => {
+		setCalendarView(newView);
+	}, []);
 
 	// Handle calendar date selection
 	const handleDateChange = useCallback(
 		(date: Date | null) => {
-			// Convert to UTC midnight ISO string to avoid timezone shifts
-			const dateValue = date ? dateToISOString(date) : null;
-			helpers.setValue(dateValue, true);
-			helpers.setError(undefined);
+			// Only update the value and close calendar if we're in the 'day' view
+			// This allows navigation through year -> month -> day without closing or updating the value
+			// When selecting year or month, the calendar will navigate to the next view
+			// but we don't update the form value until a day is actually selected
+			if (calendarView === 'day') {
+				// Convert to UTC midnight ISO string to avoid timezone shifts
+				const dateValue = date ? dateToISOString(date) : null;
+				helpers.setValue(dateValue, true);
+				helpers.setError(undefined);
 
-			// Update input display
-			if (date) {
-				setInputValue(format(date, 'P', { locale: detectedLocale }));
-			} else {
-				setInputValue('');
-			}
-
-			// Close calendar and return focus
-			setAnchorEl(null);
-			setTimeout(() => {
-				if (inputRef.current) {
-					inputRef.current.focus();
+				// Update input display
+				if (date) {
+					setInputValue(format(date, 'P', { locale: detectedLocale }));
+				} else {
+					setInputValue('');
 				}
-			}, 0);
+
+				// Close calendar and return focus
+				setAnchorEl(null);
+				setTimeout(() => {
+					if (inputRef.current) {
+						inputRef.current.focus();
+					}
+				}, 0);
+			}
+			// When selecting year or month, do nothing - let the calendar navigate
+			// The form value will only be updated when a day is selected in the day view
 		},
-		[helpers, detectedLocale]
+		[helpers, detectedLocale, calendarView]
 	);
+
+	// Reset calendar view when opening
+	const handleOpenCalendar = useCallback((e: React.MouseEvent<HTMLElement>) => {
+		setAnchorEl(e.currentTarget);
+		setCalendarView('day'); // Reset to day view when opening
+	}, []);
 
 	// Clear date
 	const clearDate = useCallback(() => {
@@ -230,7 +287,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 			if (event.ctrlKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
 				event.preventDefault();
 				if (currentValue) {
-					const currentDate = parseDateFromISO(currentValue);
+					const currentDate = parseDateString(currentValue);
 					if (currentDate) {
 						const newDate =
 							event.key === 'ArrowLeft'
@@ -250,7 +307,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 			if (event.ctrlKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
 				event.preventDefault();
 				if (currentValue) {
-					const currentDate = parseDateFromISO(currentValue);
+					const currentDate = parseDateString(currentValue);
 					if (currentDate) {
 						const newDate =
 							event.key === 'ArrowUp'
@@ -395,8 +452,8 @@ export function FormDatePicker<R = Record<string, unknown>>({
 
 	const dateValue = useMemo(() => {
 		if (!field.value) return null;
-		// Parse date from ISO string (extracts date-only, uses UTC noon to avoid shifts)
-		return parseDateFromISO(field.value);
+		// Parse date from field value (supports both ISO and localized formats)
+		return parseDateString(field.value);
 	}, [field.value]);
 
 	// Filter out conflicting props from textFieldProps since we're using Formik (controlled mode)
@@ -483,7 +540,7 @@ export function FormDatePicker<R = Record<string, unknown>>({
 								)}
 								<IconButton
 									size="small"
-									onClick={(e) => setAnchorEl(e.currentTarget)}
+									onClick={handleOpenCalendar}
 									edge="end"
 									tabIndex={-1}
 									disabled={disabled}
@@ -514,6 +571,9 @@ export function FormDatePicker<R = Record<string, unknown>>({
 				<DateCalendar
 					value={dateValue}
 					onChange={handleDateChange}
+					view={calendarView}
+					onViewChange={handleViewChange}
+					views={['year', 'month', 'day']}
 				/>
 			</Popover>
 		</LocalizationProvider>
